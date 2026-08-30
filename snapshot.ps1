@@ -1076,7 +1076,7 @@ if ($cs) {
 if ($surface) {
   [void]$sb.AppendLine("| Decision facts | chassis=$(Escape-MdCell $surface.ChassisHint) disk=$(Escape-MdCell $surface.DiskHint) gpu=$(Escape-MdCell $surface.GpuHint) power=$(Escape-MdCell $surface.PowerHint) |")
 }
-[void]$sb.AppendLine("| Procesos | $($rows.Count) (top: $((@($top5 | ForEach-Object { "$($_.Name)x$(Format-Bytes $_.WorkingSetBytes)" }) -join ', '))) |")
+[void]$sb.AppendLine("| Procesos | $($rows.Count) (top: $((@($top5 | ForEach-Object { "$($_.Name): $(Format-Bytes $_.WorkingSetBytes)" }) -join ', '))) |")
 [void]$sb.AppendLine("| Servicios | $($serviceRows.Count) total, $($autoRunning.Count) auto en ejecucion |")
 [void]$sb.AppendLine("| Red | $($netRows.Count) filas TCP |")
 if ($kernel) {
