@@ -72,6 +72,7 @@ Espera ~1–2 min. Al terminar verás la carpeta en el Desktop. Abre el `.md` pa
 
 | Sección | Para qué sirve |
 | --- | --- |
+| TL;DR | Resumen de 15 líneas: equipo, RAM, top de procesos, kernel, firewall, problemas |
 | Decision facts | ChassisHint/DiskHint/GpuHint/PowerHint — la IA debe condicionar cada tweak a estos |
 | RAM y commit | Cuánto puedes recortar en realidad (working set = cota superior) |
 | Procesos | Qué corre, de quién, con qué líneas de comando (secretos redactados) |
@@ -91,6 +92,7 @@ Espera ~1–2 min. Al terminar verás la carpeta en el Desktop. Abre el `.md` pa
 | `-KernelTraceSeconds N` | Duración de la traza (5–120, default 15) |
 | `-KernelTraceDeep` | ETW con file/network/registry/thread (traza grande) |
 | `-KeepEtl` | Conserva el `.etl` crudo en la carpeta de reporte |
+| `-Help` | Muestra la ayuda de uso y sale |
 
 ### Solución de problemas
 
