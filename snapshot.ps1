@@ -17,15 +17,43 @@ param(
   [switch]$SkipKernelTrace,
   [int]$KernelTraceSeconds = 15,
   [switch]$KeepEtl,
-  [switch]$KernelTraceDeep
+  [switch]$KernelTraceDeep,
+  [switch]$Help
 )
 
 Set-StrictMode -Version 1
 $ErrorActionPreference = 'Continue'
 $ProgressPreference = 'SilentlyContinue'
-$script:ToolVersion = '2.2.0'
+$script:ToolVersion = '2.3.0'
 $script:StartedUtc = [datetime]::UtcNow
 $script:Issues = New-Object System.Collections.Generic.List[string]
+
+if ($Help) {
+@'
+process-deglose v2.3.0 - inventario read-only de Windows 10/11 (sin cambios en el sistema)
+
+USO
+  powershell -NoProfile -ExecutionPolicy Bypass -File snapshot.ps1 [opciones]
+
+OPCIONES
+  -OutDir <ruta>          Carpeta de salida (default: Desktop)
+  -SkipSignature          Mas rapido (no verifica firmas digitales)
+  -SkipNetwork            Salta conexiones TCP
+  -SkipTasks              Salta tareas programadas
+  -SkipHeavy              Salta Uninstall + AppX
+  -SkipKernel             Salta toda la superficie kernel
+  -SkipKernelTrace        Salta solo la traza ETW del kernel
+  -KernelTraceSeconds N   Duracion de la traza ETW (5-120, default 15)
+  -KernelTraceDeep        ETW con keywords file/network/registry/thread
+  -KeepEtl                Conserva el .etl crudo en la carpeta de reporte
+  -NoJson                 No escribe el JSON bulk
+  -NoExplorer             No abre la carpeta al terminar
+  -Help                   Muestra esta ayuda
+
+Docs: https://github.com/Vahlame/process-deglose
+'@ | Write-Host
+  exit 0
+}
 
 function Add-Issue {
   param([string]$Message)
@@ -1033,6 +1061,32 @@ if ($cpus.Count -gt 0) { $cpuName = [string]$cpus[0].Name }
 [void]$sb.AppendLine("Coverage notes: usermode cannot see kernel-hidden rootkit processes; since v2.2 the kernel surface section enumerates every loaded kernel module (SystemModuleInformation), so a hidden process's driver still shows up there. Protected Process Light (PPL) images may omit path or modules. Session-0 services need elevation for full command lines. ``Get-Process`` vs CIM mismatches are listed below. Per-process loaded-module lists are not enumerated (that API hangs on protected processes); thread and handle counts are included. Kernel modules and the kernel process list work without admin; pool tags, minifilters, and the ETW trace need Administrator. The extended telemetry section (network L2/L3, accounts/groups/shares, logon sessions, thermal, battery wear, audio, monitors) and the communication section (named pipes, firewall, hosts, proxy, top talkers, services on ports) are read-only and mostly admin-free.")
 [void]$sb.AppendLine()
 
+[void]$sb.AppendLine("## TL;DR")
+[void]$sb.AppendLine()
+$tldrWs = Sum-Bytes $rows 'WorkingSetBytes'
+$top5 = @($rows | Select-Object -First 5)
+[void]$sb.AppendLine("| Campo | Valor |")
+[void]$sb.AppendLine("| --- | --- |")
+if ($cs) {
+  [void]$sb.AppendLine("| Equipo | $(Escape-MdCell $cs.Manufacturer) $(Escape-MdCell $cs.Model) |")
+}
+[void]$sb.AppendLine("| CPU | $(Escape-MdCell $cpuName) |")
+[void]$sb.AppendLine("| RAM | $(Format-Bytes $ramUsable) usable de $(Format-Bytes $ramInstalled) instalada |")
+[void]$sb.AppendLine("| Working sets (suma) | $(Format-Bytes $tldrWs) |")
+if ($surface) {
+  [void]$sb.AppendLine("| Decision facts | chassis=$(Escape-MdCell $surface.ChassisHint) disk=$(Escape-MdCell $surface.DiskHint) gpu=$(Escape-MdCell $surface.GpuHint) power=$(Escape-MdCell $surface.PowerHint) |")
+}
+[void]$sb.AppendLine("| Procesos | $($rows.Count) (top: $((@($top5 | ForEach-Object { "$($_.Name)x$(Format-Bytes $_.WorkingSetBytes)" }) -join ', '))) |")
+[void]$sb.AppendLine("| Servicios | $($serviceRows.Count) total, $($autoRunning.Count) auto en ejecucion |")
+[void]$sb.AppendLine("| Red | $($netRows.Count) filas TCP |")
+if ($kernel) {
+  [void]$sb.AppendLine("| Kernel | $($kernel.Modules.Count) modulos cargados ($(Format-Bytes $kernel.TotalModuleBytes)), $($kernel.Drivers.Count) drivers registrados |")
+}
+if ($communication) {
+  [void]$sb.AppendLine("| Comunicacion | $($communication.FirewallRules.Count) reglas de firewall, $($communication.NamedPipes.Count) pipes, $($communication.TopTalkers.Count) talkers |")
+}
+[void]$sb.AppendLine("| Problemas de coleccion | $($script:Issues.Count) |")
+[void]$sb.AppendLine()
 [void]$sb.AppendLine("## Machine")
 [void]$sb.AppendLine()
 [void]$sb.AppendLine("| Field | Value |")
@@ -1412,6 +1466,9 @@ $utf8 = New-Utf8Bom
 if (-not $NoJson) {
   Write-Host '       JSON bulk...'
   $bulk = [ordered]@{
+    SchemaVersion = '1.0'
+    Generator = 'process-deglose'
+    Repo = 'https://github.com/Vahlame/process-deglose'
     ToolVersion = $script:ToolVersion
     CapturedUtc = $script:StartedUtc.ToString('o')
     Elevated = $isAdmin
@@ -1447,6 +1504,15 @@ Write-Host "Wrote $mdPath"
 if (-not $NoJson -and (Test-Path -LiteralPath $jsonPath)) { Write-Host "Wrote $jsonPath" }
 Write-Host ("Desktop folder: {0}" -f $OutDir)
 Write-Host ("Duration {0:N1}s  processes {1}  services {2}" -f $elapsed, $rows.Count, $serviceRows.Count)
+
+Write-Host ""
+Write-Host ("  TL;DR  {0} processes - {1} services - RAM {2} in working sets" -f $rows.Count, $serviceRows.Count, (Format-Bytes $tldrWs))
+if ($kernel) { Write-Host ("         {0} kernel modules - {1} drivers - {2} firewall rules" -f $kernel.Modules.Count, $kernel.Drivers.Count, $communication.FirewallRules.Count) }
+Write-Host "  Top consumers:"
+foreach ($r in (@($rows | Select-Object -First 5))) {
+  Write-Host ("    {0,-32} {1,10}  {2}" -f $r.Name, (Format-Bytes $r.WorkingSetBytes), $r.IntegrityHint)
+}
+Write-Host ("  Collection issues: {0}" -f $script:Issues.Count)
 
 $sendPath = Join-Path $OutDir 'SEND_THIS_FOLDER_TO_THE_OTHER_AI.txt'
 $sendText = @"

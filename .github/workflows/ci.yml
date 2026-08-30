@@ -1,0 +1,29 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  analyze:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: PSScriptAnalyzer (errores)
+        shell: pwsh
+        run: |
+          Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser -SkipPublisherCheck
+          $res = Invoke-ScriptAnalyzer -Path . -Recurse -IncludeDefaultRules -Severity Error
+          if ($res) {
+            $res | Format-Table -AutoSize
+            exit 1
+          }
+          Write-Host "PSScriptAnalyzer: sin errores"
+
+      - name: Prueba de humo (no-admin, rapida)
+        shell: pwsh
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File .\snapshot.ps1 -SkipSignature -SkipNetwork -SkipTasks -SkipHeavy -NoExplorer -KernelTraceSeconds 5 -OutDir "$env:RUNNER_TEMP\deglose-ci"
+          if ($LASTEXITCODE -ne 0) { exit 1 }

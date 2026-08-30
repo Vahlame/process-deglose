@@ -1,5 +1,9 @@
 # process-deglose
 
+[![GitHub release](https://img.shields.io/github/v/release/Vahlame/process-deglose)](https://github.com/Vahlame/process-deglose/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![CI](https://github.com/Vahlame/process-deglose/actions/workflows/ci.yml/badge.svg)](https://github.com/Vahlame/process-deglose/actions)
+
 A **read-only Windows inventory** that takes a full picture of your PC — including kernel-level telemetry — and writes it to a local report. Nothing is installed, nothing is changed, nothing leaves your machine unless you send it.
 
 It exists so you can hand that report to another tool or AI and get back **performance recommendations** (RAM cuts, background noise, universal IF-THEN tweaks) tailored to your exact hardware.
@@ -117,4 +121,4 @@ Switches: `-SkipSignature` (faster), `-SkipNetwork`, `-SkipTasks`, `-SkipHeavy` 
 
 ## License
 
-All rights reserved — feel free to use it on your own machines. (No license file yet.)
+MIT — úsalo, modifícalo y compártelo libremente. Ver [LICENSE](LICENSE).
