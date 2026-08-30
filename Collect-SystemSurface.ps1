@@ -57,7 +57,7 @@ function Collect-SystemSurface {
     AutomaticManagedPagefile = $null
   }
 
-  Write-Host '[7/13] CPU, firmware, GPU, storage...'
+  Write-Host '[7/14] CPU, firmware, GPU, storage...'
 
   $cpuCim = @()
   try { $cpuCim = @(Get-CimInstance -ClassName Win32_Processor -ErrorAction Stop) } catch { Add-Issue "Win32_Processor extra: $($_.Exception.Message)" }
@@ -232,7 +232,7 @@ function Collect-SystemSurface {
     })
   }
 
-  Write-Host '[8/13] Network adapters, power, firmware security...'
+  Write-Host '[8/14] Network adapters, power, firmware security...'
   try {
     $nics = @(Get-NetAdapter -ErrorAction Stop)
     foreach ($n in $nics) {
@@ -346,7 +346,7 @@ function Collect-SystemSurface {
     Add-Issue "Get-MMAgent: $($_.Exception.Message)"
   }
 
-  Write-Host '[9/13] Policy registry, features, programs...'
+  Write-Host '[9/14] Policy registry, features, programs...'
   $policySpecs = @(
     @{ Path = 'HKCU:\Control Panel\Desktop'; Name = 'MenuShowDelay'; Note = 'Start menu / UI delay (ms).' }
     @{ Path = 'HKCU:\Control Panel\Desktop'; Name = 'DragFullWindows'; Note = '1 = show window contents while dragging.' }
@@ -542,7 +542,7 @@ function Collect-SystemSurface {
     }
   }
 
-  Write-Host '[10/13] Events, Defender, problem devices...'
+  Write-Host '[10/14] Events, Defender, problem devices...'
   try {
     $pnp = @(Get-PnpDevice -ErrorAction Stop | Where-Object {
         $_.Status -and $_.Status -ne 'OK' -and $_.Status -ne 'Unknown'

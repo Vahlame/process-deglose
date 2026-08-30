@@ -23,7 +23,7 @@ param(
 Set-StrictMode -Version 1
 $ErrorActionPreference = 'Continue'
 $ProgressPreference = 'SilentlyContinue'
-$script:ToolVersion = '2.1.0'
+$script:ToolVersion = '2.2.0'
 $script:StartedUtc = [datetime]::UtcNow
 $script:Issues = New-Object System.Collections.Generic.List[string]
 
@@ -336,7 +336,7 @@ Write-Host "Process inventory snapshot v$($script:ToolVersion)"
 Write-Host "Admin: $isAdmin  Out: $mdPath"
 
 # --- machine / RAM ---
-Write-Host '[1/13] Machine and RAM...'
+Write-Host '[1/14] Machine and RAM...'
 $os = $null
 $cs = $null
 $cpus = @()
@@ -379,7 +379,7 @@ try {
 }
 
 # --- processes from CIM + Get-Process + native path ---
-Write-Host '[2/13] Processes (CIM + Get-Process)...'
+Write-Host '[2/14] Processes (CIM + Get-Process)...'
 $cimProcs = @()
 try { $cimProcs = @(Get-CimInstance -ClassName Win32_Process -ErrorAction Stop) } catch { Add-Issue "Win32_Process: $($_.Exception.Message)" }
 
@@ -619,7 +619,7 @@ $onlyCim = @($rows | Where-Object { $_.SeenByCim -and -not $_.SeenByGetProcess }
 $onlyGp = @($rows | Where-Object { $_.SeenByGetProcess -and -not $_.SeenByCim })
 
 # --- services ---
-Write-Host '[3/13] Services...'
+Write-Host '[3/14] Services...'
 $svcPs = @()
 try { $svcPs = @(Get-Service -ErrorAction Stop) } catch { Add-Issue "Get-Service: $($_.Exception.Message)" }
 $svcPsByName = @{}
@@ -651,7 +651,7 @@ foreach ($sv in $svcCim) {
 $serviceRows = @($serviceRows | Sort-Object State, Name)
 
 # --- startup ---
-Write-Host '[4/13] Startup entries...'
+Write-Host '[4/14] Startup entries...'
 function Get-RunKeyValues {
   param([string]$HivePath, [string]$Source)
   $list = @()
@@ -710,7 +710,7 @@ $taskRows = @()
 $disabledTaskCount = 0
 $taskErrorCount = 0
 if (-not $SkipTasks) {
-  Write-Host '[5/13] Scheduled tasks...'
+  Write-Host '[5/14] Scheduled tasks...'
   $tasks = @()
   try {
     $tasks = @(Get-ScheduledTask -ErrorAction Stop)
@@ -770,13 +770,13 @@ if (-not $SkipTasks) {
     }
   }
 } else {
-  Write-Host '[5/13] Scheduled tasks skipped'
+  Write-Host '[5/14] Scheduled tasks skipped'
 }
 
 # --- network ---
 $netRows = @()
 if (-not $SkipNetwork) {
-  Write-Host '[6/13] TCP listen/established...'
+  Write-Host '[6/14] TCP listen/established...'
   try {
     $conns = @(Get-NetTCPConnection -State Listen, Established -ErrorAction Stop)
     foreach ($n in $conns) {
@@ -793,7 +793,7 @@ if (-not $SkipNetwork) {
     Add-Issue "Get-NetTCPConnection: $($_.Exception.Message)"
   }
 } else {
-  Write-Host '[6/13] Network skipped'
+  Write-Host '[6/14] Network skipped'
 }
 
 $surface = $null
@@ -810,26 +810,36 @@ $kernelPath = Join-Path $PSScriptRoot 'Collect-KernelSurface.ps1'
 if (-not $SkipKernel) {
   if (Test-Path -LiteralPath $kernelPath) {
     . $kernelPath
-    Write-Host '[11/13] Kernel surface (modules, pool, processes, counters, ETW)...'
+    Write-Host '[11/14] Kernel surface (modules, pool, processes, counters, ETW)...'
     $kernel = Collect-KernelSurface -IsAdmin $isAdmin -SkipKernelTrace ([bool]$SkipKernelTrace) -KernelTraceSeconds $KernelTraceSeconds -KeepEtl ([bool]$KeepEtl) -OutDir $OutDir -KernelTraceDeep ([bool]$KernelTraceDeep)
   } else {
     Add-Issue 'Collect-KernelSurface.ps1 missing'
   }
 } else {
-  Write-Host '[11/13] Kernel surface skipped'
+  Write-Host '[11/14] Kernel surface skipped'
 }
 
 $extended = $null
 $extPath = Join-Path $PSScriptRoot 'Collect-ExtendedSurface.ps1'
 if (Test-Path -LiteralPath $extPath) {
   . $extPath
-  Write-Host '[12/13] Extended telemetry (network, accounts, thermal)...'
+  Write-Host '[12/14] Extended telemetry (network, accounts, thermal)...'
   $extended = Collect-ExtendedSurface
 } else {
   Add-Issue 'Collect-ExtendedSurface.ps1 missing'
 }
 
-Write-Host '[13/13] Aggregates + Markdown...'
+$communication = $null
+$commPath = Join-Path $PSScriptRoot 'Collect-CommunicationSurface.ps1'
+if (Test-Path -LiteralPath $commPath) {
+  . $commPath
+  Write-Host '[13/14] Communication surface (pipes, firewall, talkers)...'
+  $communication = Collect-CommunicationSurface
+} else {
+  Add-Issue 'Collect-CommunicationSurface.ps1 missing'
+}
+
+Write-Host '[14/14] Aggregates + Markdown...'
 
 function Sum-Bytes {
   param($Items, [string]$Prop)
@@ -1020,7 +1030,7 @@ if ($cpus.Count -gt 0) { $cpuName = [string]$cpus[0].Name }
 [void]$sb.AppendLine("| PowerShell | $($PSVersionTable.PSVersion) $($PSVersionTable.PSEdition) |")
 [void]$sb.AppendLine("| Tool | snapshot.ps1 v$($script:ToolVersion) |")
 [void]$sb.AppendLine()
-[void]$sb.AppendLine("Coverage notes: usermode cannot see kernel-hidden rootkit processes; since v2.1 the kernel surface section enumerates every loaded kernel module (SystemModuleInformation), so a hidden process's driver still shows up there. Protected Process Light (PPL) images may omit path or modules. Session-0 services need elevation for full command lines. ``Get-Process`` vs CIM mismatches are listed below. Per-process loaded-module lists are not enumerated (that API hangs on protected processes); thread and handle counts are included. Kernel modules and the kernel process list work without admin; pool tags, minifilters, and the ETW trace need Administrator. The extended telemetry section (network L2/L3, accounts/groups/shares, logon sessions, thermal, battery wear, audio, monitors) is read-only and mostly admin-free.")
+[void]$sb.AppendLine("Coverage notes: usermode cannot see kernel-hidden rootkit processes; since v2.2 the kernel surface section enumerates every loaded kernel module (SystemModuleInformation), so a hidden process's driver still shows up there. Protected Process Light (PPL) images may omit path or modules. Session-0 services need elevation for full command lines. ``Get-Process`` vs CIM mismatches are listed below. Per-process loaded-module lists are not enumerated (that API hangs on protected processes); thread and handle counts are included. Kernel modules and the kernel process list work without admin; pool tags, minifilters, and the ETW trace need Administrator. The extended telemetry section (network L2/L3, accounts/groups/shares, logon sessions, thermal, battery wear, audio, monitors) and the communication section (named pipes, firewall, hosts, proxy, top talkers, services on ports) are read-only and mostly admin-free.")
 [void]$sb.AppendLine()
 
 [void]$sb.AppendLine("## Machine")
@@ -1115,6 +1125,10 @@ if ($extended) {
   Write-ExtendedSurfaceMarkdown -Sb $sb -Extended $extended
 }
 
+if ($communication) {
+  Write-CommunicationSurfaceMarkdown -Sb $sb -Communication $communication
+}
+
 [void]$sb.AppendLine("## Digest for the analyzing agent")
 [void]$sb.AppendLine()
 [void]$sb.AppendLine("- Process rows: **$($rows.Count)** (CIM $($cimProcs.Count), Get-Process $($gpList.Count))")
@@ -1139,6 +1153,9 @@ if ($kernel) {
 }
 if ($extended) {
   [void]$sb.AppendLine("- Extended telemetry: routes **$($extended.Routes.Count)**, neighbors **$($extended.Neighbors.Count)**, DNS cache **$($extended.DnsCache.Count)**, adapters **$($extended.AdapterStats.Count)**, users **$($extended.Users.Count)**, groups **$($extended.Groups.Count)**, shares **$($extended.Shares.Count)**, logon sessions **$($extended.LogonSessions.Count)**, thermal **$($extended.Thermal.Count)**")
+}
+if ($communication) {
+  [void]$sb.AppendLine("- Communication: named pipes **$($communication.NamedPipes.Count)**, firewall rules **$($communication.FirewallRules.Count)** (enabled $($communication.FirewallSummary.Enabled)), top talkers **$($communication.TopTalkers.Count)**, services on ports **$($communication.ServicesOnPorts.Count)**, hosts entries **$($communication.HostsLines)**")
 }
 [void]$sb.AppendLine()
 
@@ -1411,6 +1428,7 @@ if (-not $NoJson) {
     Surface = $surface
     Kernel = $kernel
     Extended = $extended
+    Communication = $communication
     Issues = @($script:Issues)
   }
   try {

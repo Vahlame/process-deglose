@@ -40,13 +40,60 @@ Desktop\process-deglose-report-<COMPUTER>-<timestamp>\
 - **Security posture:** Defender, other AV, firewall profiles, 7-day error digest
 - **Kernel surface:** loaded kernel modules, kernel-side process list, pool tags (RAMMap-style), per-core CPU time shares, kernel counters, registered kernel drivers, minifilter stack, short ETW kernel trace (process/image/disk, aggregated)
 - **Extended telemetry:** routes, ARP/ND, DNS cache/servers, adapter statistics, UDP endpoints, local accounts/groups/shares, logon sessions, thermal zones, battery wear, audio, monitors
+- **Communication:** named pipes, firewall rules, hosts file, system proxy, top network talkers per process, services on listening ports
 
 ## How it behaves
 
 - **Read-only.** It queries WMI/CIM, performance counters, `fltmc`, `logman` and read-only kernel APIs. It never disables services, edits the registry, installs drivers, or applies changes.
 - **Local first.** Everything lands in the Desktop folder. The raw kernel trace is deleted after digesting unless you pass `-KeepEtl`.
 - **Your call.** You decide what to send. The report even contains a "Contract for the analyzing agent" so the other tool knows the limits (don't touch OS-critical stuff, etc.).
-- **Honest about limits.** Kernel-hidden *processes* are out of reach, but since v2.1 every loaded kernel *module* is enumerated — a driver can't hide from the report.
+- **Honest about limits.** Kernel-hidden *processes* are out of reach, but since v2.2 every loaded kernel *module* is enumerated — a driver can't hide from the report.
+
+## Guía de uso
+
+### Primer run (recomendado)
+
+```text
+Run-Snapshot.bat            ← eleva con UAC y captura TODO (incluye kernel + ETW 15 s)
+```
+
+Espera ~1–2 min. Al terminar verás la carpeta en el Desktop. Abre el `.md` para revisar a simple vista; el `.json` es el data-dump completo para herramientas.
+
+### Qué enviar al optimizador
+
+- **Carpeta completa** (`.md` + `.json`) — máximo contexto.
+- O solo el `.md` si la IA solo lee texto. El archivo `SEND_THIS_FOLDER_TO_THE_OTHER_AI.txt` lo recuerda por ti.
+
+### Secciones del reporte (para interpretar)
+
+| Sección | Para qué sirve |
+| --- | --- |
+| Decision facts | ChassisHint/DiskHint/GpuHint/PowerHint — la IA debe condicionar cada tweak a estos |
+| RAM y commit | Cuánto puedes recortar en realidad (working set = cota superior) |
+| Procesos | Qué corre, de quién, con qué líneas de comando (secretos redactados) |
+| Kernel surface | Drivers y módulos cargados, pool, tiempos por núcleo, procesos ocultos |
+| Communication surface | Quién se conecta con quién: puertos, firewall, pipes, proxy |
+| Collection issues | Lo que no se pudo leer y por qué (necesita admin, etc.) |
+
+### Switches de conveniencia
+
+| Switch | Efecto |
+| --- | --- |
+| `-SkipSignature` | Mucho más rápido (no firma digital por binario) |
+| `-SkipNetwork` / `-SkipTasks` / `-SkipHeavy` | Salta red / tareas / Uninstall+AppX |
+| `-NoJson` / `-NoExplorer` / `-OutDir D:\path` | Sin JSON / sin abrir carpeta / destino propio |
+| `-SkipKernel` | Salta todo el paso kernel |
+| `-SkipKernelTrace` | Igual que arriba pero solo la traza ETW |
+| `-KernelTraceSeconds N` | Duración de la traza (5–120, default 15) |
+| `-KernelTraceDeep` | ETW con file/network/registry/thread (traza grande) |
+| `-KeepEtl` | Conserva el `.etl` crudo en la carpeta de reporte |
+
+### Solución de problemas
+
+- **Secciones kernel vacías** → ejecuta con `Run-Snapshot.bat` (elevado), no el NoAdmin.
+- **Muy lento** → añade `-SkipSignature -SkipKernelTrace`.
+- **SmartScreen/Defender al ejecutar el .bat** → es un script sin firma; usa "More info → Run anyway" o ejecuta desde PowerShell: `powershell -NoProfile -ExecutionPolicy Bypass -File snapshot.ps1`.
+- **El reporte no cambia la máquina** — si quieres aplicar tweaks, hazlo después con otra herramienta y con respaldo.
 
 ## From a prompt (optional)
 
@@ -64,6 +111,7 @@ Switches: `-SkipSignature` (faster), `-SkipNetwork`, `-SkipTasks`, `-SkipHeavy` 
 | `Collect-SystemSurface.ps1` | Hardware, power, security, policy |
 | `Collect-KernelSurface.ps1` | Kernel-level telemetry (modules, pool, ETW…) |
 | `Collect-ExtendedSurface.ps1` | Network, accounts, thermal, battery… |
+| `Collect-CommunicationSurface.ps1` | Pipes, firewall, hosts, proxy, top talkers |
 | `Run-Snapshot.bat` | Double-click launcher, requests UAC |
 | `Run-Snapshot-NoAdmin.bat` | Launcher without elevation |
 
